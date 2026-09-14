@@ -141,7 +141,7 @@ jobs:
     if: github.repository == 'quickdesh/Animiru'
     name: Create GitHub Release
     runs-on: ubuntu-24.04
-    needs: [get_tag, build]
+    needs: [get_tag, build, build_foss]
 
     steps:
       - name: Download all artifacts
