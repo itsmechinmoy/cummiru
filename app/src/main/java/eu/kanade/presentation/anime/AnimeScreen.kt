@@ -97,6 +97,8 @@ import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.shouldExpandFAB
 import tachiyomi.source.local.isLocal
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -1228,6 +1230,8 @@ private fun LazyGridScope.sharedEpisodeItems(
         val context = LocalContext.current
         val haptic = LocalHapticFeedback.current
         val downloadProvider = remember { context.appGraph.downloadProvider }
+        val trackPreferences = remember { context.appGraph.trackPreferences }
+        val enableAniZip = remember { trackPreferences.enableAniZip.get() }
 
         when (item) {
             is EpisodeList.MissingCount -> {
@@ -1258,7 +1262,7 @@ private fun LazyGridScope.sharedEpisodeItems(
                         item.fileSize = fileSizeAsync
                     }
                 }
-                // <-- AM (FILE_SIZE)
+                val aniZipMeta = if (enableAniZip) item.aniZipMeta else null
                 AnimeEpisodeListItem(
                     title = if (anime.displayMode == Anime.EPISODE_DISPLAY_NUMBER) {
                         stringResource(
@@ -1266,9 +1270,20 @@ private fun LazyGridScope.sharedEpisodeItems(
                             formatEpisodeNumber(item.episode.episodeNumber),
                         )
                     } else {
-                        item.episode.name
+                        val anizipTitle = aniZipMeta?.title
+                        if (!anizipTitle.isNullOrBlank() && !item.episode.name.contains(anizipTitle, ignoreCase = true)) {
+                            "${item.episode.name} - $anizipTitle"
+                        } else {
+                            item.episode.name
+                        }
                     },
-                    date = relativeDateText(item.episode.dateUpload),
+                    date = relativeDateText(
+                        if (aniZipMeta?.airDateMillis != null && item.episode.dateUpload <= 0L) {
+                            aniZipMeta.airDateMillis
+                        } else {
+                            item.episode.dateUpload
+                        },
+                    ),
                     watchProgress = item.episode.lastSecondSeen
                         .takeIf { !item.episode.seen && it > 0L }
                         ?.let {
@@ -1282,8 +1297,9 @@ private fun LazyGridScope.sharedEpisodeItems(
                         },
                     scanlator = item.episode.scanlator.takeIf { !it.isNullOrBlank() },
                     // AY -->
-                    summary = item.episode.summary.takeIf { !it.isNullOrBlank() && showSummaries },
-                    previewUrl = item.episode.previewUrl.takeIf { !it.isNullOrBlank() && showPreviews },
+                    summary = (aniZipMeta?.overview ?: item.episode.summary).takeIf { !it.isNullOrBlank() && showSummaries },
+                    previewUrl = (aniZipMeta?.image ?: item.episode.previewUrl).takeIf { !it.isNullOrBlank() && showPreviews },
+                    rating = aniZipMeta?.rating,
                     // <-- AY
                     seen = item.episode.seen,
                     bookmark = item.episode.bookmark,
